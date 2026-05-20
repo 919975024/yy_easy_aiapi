@@ -302,15 +302,15 @@ curl -X POST http://{host}:{port}/yy_easy_aiapi/admin/pricing/api \
 在线文档：`http://{host}:{port}/yy_easy_aiapi/swagger`
 ## 7 后台截图
 渠道管理
-@image imgs/channel.png
+@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/channel.png
 token管理
-@image imgs/token.png
+@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/token.png
 积分操作
-@image imgs/addOrSub.png
+@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/addOrSub.png
 消费日志
-@image imgs/log.png
+@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/log.png
 全部倍率
-@image imgs/costX.png
+@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/costX.png
 ## 8 联系作者
 - issue 提交
 - 邮箱 919975024@qq.com 
