@@ -29,35 +29,43 @@
 
 ## 2. 安装部署
 
-### 2.1 下载二进制包
+### 2.1 二进制部署（推荐）
 
-| 平台 | 文件 |
-|---|---|
-| Windows | `yy_easy_aiapi.exe` |
-| Linux x86_64 | `yy_easy_aiapi` |
+从 [Releases](https://github.com/919975024/yy_easy_aiapi/releases) 下载对应平台的压缩包。
 
-### 2.2 部署目录结构
+#### Linux
+
+```bash
+# 下载并解压
+wget https://github.com/919975024/yy_easy_aiapi/blob/master/target/release/yy_easy_aiapi
+https://github.com/919975024/yy_easy_aiapi/blob/master/config.toml
+# 编辑配置 修改你参数
+vim config.toml
+
+# 启动
+chmod +x yy_easy_aiapi
+./yy_easy_aiapi
+```
+
+#### Windows
+
+```powershell
+# 下载 https://github.com/919975024/yy_easy_aiapi/blob/master/target/release/yy_easy_aiapi.exe 
+# 下载 https://github.com/919975024/yy_easy_aiapi/blob/master/config.toml
+
+# 启动yy_easy_aiapi.exe
+```
+
+#### 部署目录结构
 
 ```
-/opt/yy_easy_aiapi/          (或 C:\app\)
 ├── yy_easy_aiapi             # 二进制
 ├── config.toml               # 配置文件（修改后重启生效）
 ├── templates/                # 管理后台 HTML 模板
 └── db/                       # 数据目录（自动创建）
 ```
 
-### 2.3 启动
-
-```bash
-# Linux
-chmod +x yy_easy_aiapi
-./yy_easy_aiapi
-
-# Windows
-yy_easy_aiapi.exe
-```
-
-### 2.4 访问地址
+#### 访问地址
 
 | 地址 | 说明 |
 |---|---|
@@ -68,18 +76,38 @@ yy_easy_aiapi.exe
 | `http://{host}:{port}/yy_easy_aiapi/admin/transactions` | 流水查询 |
 | `http://{host}:{port}/yy_easy_aiapi/admin/pricing` | 计费设置 |
 
-默认端口 7001，可在 `config.toml` 修改。
+默认端口见 `config.toml` 中 `[server]` 配置。
+
+### 2.2 自行编译
+
+见 [4. 编译打包](#4-编译打包)。
 
 ---
 
-## 3. 编译打包
+## 3. 后台截图
 
-### 3.1 环境要求
+| 渠道管理 | Token 管理 |
+|---|---|
+| ![渠道管理](https://raw.githubusercontent.com/919975024/yy_easy_aiapi/master/imgs/channel.png) | ![Token管理](https://raw.githubusercontent.com/919975024/yy_easy_aiapi/master/imgs/token.png) |
+
+| 积分操作 | 消费日志 |
+|---|---|
+| ![积分操作](https://raw.githubusercontent.com/919975024/yy_easy_aiapi/master/imgs/addOrSub.png) | ![消费日志](https://raw.githubusercontent.com/919975024/yy_easy_aiapi/master/imgs/log.png) |
+
+| 全局倍率 |
+|---|
+| ![全局倍率](https://raw.githubusercontent.com/919975024/yy_easy_aiapi/master/imgs/costX.png) |
+
+---
+
+## 4. 编译打包
+
+### 4.1 环境要求
 
 - Rust 1.75+
 - `config.toml` + `templates/` 目录
 
-### 3.2 编译
+### 4.2 编译
 
 ```bash
 # 开发编译
@@ -91,7 +119,7 @@ cargo build --release
 
 > Release profile 已预设 `lto = "thin"`, `codegen-units = 1`, `opt-level = 3`，二进制在 `target/release/`。
 
-### 3.3 打包
+### 4.3 打包
 
 ```bash
 # Linux
@@ -108,7 +136,7 @@ xcopy templates dist\templates\ /E
 Compress-Archive -Path dist\* -DestinationPath yy_easy_aiapi-windows.zip
 ```
 
-### 3.4 交叉编译
+### 4.4 交叉编译
 
 ```bash
 # Windows 交叉编译到 Linux
@@ -118,7 +146,7 @@ cargo build --release --target x86_64-unknown-linux-gnu
 
 ---
 
-## 4. 单实例用户建议
+## 5. 单实例用户建议
 
 测试环境：release 编译，stoolap 数据库，AI Mock（10 tokens × 3 维度），100 并发。
 
@@ -142,9 +170,9 @@ cargo build --release --target x86_64-unknown-linux-gnu
 
 ---
 
-## 5. 扩展方案
+## 6. 扩展方案
 
-### 5.1 换数据库
+### 6.1 换数据库
 
 将 stoolap 替换为 PostgreSQL / MySQL，支持千万级 token。
 
@@ -156,7 +184,7 @@ url = "postgresql://user:pass@localhost/yy_easy_aiapi"
 
 需修改 `src/db/mod.rs` 中的数据库初始化逻辑，替换 `stoolap::Database` 为对应连接池（如 `sqlx`）。
 
-### 5.2 横向扩展（按 token 前缀 + Nginx 转发）
+### 6.2 横向扩展（按 token 前缀 + Nginx 转发）
 
 Token 格式 `{port}_{uuid}`，其中 `port` 前缀可用于分片路由。
 
@@ -195,15 +223,15 @@ server {
 
 ---
 
-## 6. API 对接
+## 7. API 对接
 
-### 6.1 前置准备
+### 7.1 前置准备
 
 1. 创建渠道（管理后台或 API）
 2. 生成 Token（管理后台或 API）
 3. 给 Token 充值
 
-### 6.2 终端用户接入
+### 7.2 终端用户接入
 
 用户拿到 Token 后，直接替换 OpenAI SDK 的 `base_url` 和 `api_key`：
 
@@ -230,7 +258,7 @@ curl http://{host}:{port}/yy_easy_aiapi/v1/chat/completions \
   -d '{"model":"gpt-4o","messages":[{"role":"user","content":"hi"}]}'
 ```
 
-### 6.3 管理 API
+### 7.3 管理 API
 
 所有管理 API 需要 `Authorization: Bearer {api_token}`。
 
@@ -281,7 +309,7 @@ curl -X POST http://{host}:{port}/yy_easy_aiapi/admin/pricing/api \
   -d '{"multiplier":"1.5"}'
 ```
 
-### 6.4 API 参考
+### 7.4 API 参考
 
 | 端点 | 方法 | 鉴权 | 说明 |
 |---|---|---|---|
@@ -300,18 +328,11 @@ curl -X POST http://{host}:{port}/yy_easy_aiapi/admin/pricing/api \
 | `/admin/transactions/api` | GET | api_token | 管理员流水（含计费详情） |
 
 在线文档：`http://{host}:{port}/yy_easy_aiapi/swagger`
-## 7 后台截图
-渠道管理
-@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/channel.png
-token管理
-@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/token.png
-积分操作
-@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/addOrSub.png
-消费日志
-@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/log.png
-全部倍率
-@image https://github.com/919975024/yy_easy_aiapi/tree/master/imgs/costX.png
-## 8 联系作者
-- issue 提交
-- 邮箱 919975024@qq.com 
-- 个人主页： www.yysoftqa.com
+
+---
+
+## 8. 联系作者
+
+- [GitHub Issues](https://github.com/919975024/yy_easy_aiapi/issues)
+- 邮箱：919975024@qq.com
+- 个人主页：www.yysoftqa.com

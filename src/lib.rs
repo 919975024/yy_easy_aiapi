@@ -20,6 +20,7 @@ pub mod openapi;
 pub mod services;
 pub mod snowflake;
 pub mod state;
+pub mod templates;
 
 #[cfg(test)]
 mod tests;

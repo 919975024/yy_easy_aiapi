@@ -1,5 +1,6 @@
 //! Admin 登录/登出处理器
 
+use std::sync::OnceLock;
 use axum::{
     extract::State,
     http::StatusCode,
@@ -8,9 +9,16 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
+use tera::{Context, Tera};
 
 use crate::error::AppError;
 use crate::state::AppState;
+
+static TERA: OnceLock<Tera> = OnceLock::new();
+
+fn get_tera() -> &'static Tera {
+    TERA.get_or_init(|| crate::templates::create_tera().expect("模板加载失败"))
+}
 
 #[derive(Debug, Deserialize)]
 pub struct LoginRequest {
@@ -22,18 +30,15 @@ pub struct LoginRequest {
 pub async fn login_page(
     State(state): State<AppState>,
 ) -> Result<Html<String>, AppError> {
-    let mut ctx = tera::Context::new();
+    let mut ctx = Context::new();
     ctx.insert("title", "管理员登录");
 
     // 检测是否处于锁定状态
     let is_locked = state.login_tracker.lock().unwrap().is_locked();
     ctx.insert("is_locked", &is_locked);
 
-    let template_dir = find_template_dir();
-    let tera = tera::Tera::new(&format!("{}/*.html", template_dir))
-        .map_err(|e| AppError::config_error(format!("模板加载失败: {}", e)))?;
-
-    tera.render("login.html", &ctx)
+    get_tera()
+        .render("login.html", &ctx)
         .map(Html)
         .map_err(|e| AppError::config_error(format!("模板渲染失败: {}", e)))
 }
@@ -98,21 +103,4 @@ pub async fn logout_api(
 ) -> Json<serde_json::Value> {
     *state.admin_session_token.lock().unwrap() = None;
     Json(json!({ "success": true, "message": "已退出登录" }))
-}
-
-fn find_template_dir() -> String {
-    // 从 exe 目录向上搜索 templates/
-    if let Ok(exe) = std::env::current_exe() {
-        let mut dir = exe.parent().map(|p| p.to_path_buf());
-        for _ in 0..5 {
-            if let Some(ref d) = dir {
-                let t = d.join("templates");
-                if t.exists() {
-                    return t.to_string_lossy().to_string();
-                }
-            }
-            dir = dir.and_then(|d| d.parent().map(|p| p.to_path_buf()));
-        }
-    }
-    "templates".to_string()
 }
