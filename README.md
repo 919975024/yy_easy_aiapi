@@ -38,7 +38,7 @@
 ```bash
 # 下载并解压
 wget https://github.com/919975024/yy_easy_aiapi/blob/master/target/release/yy_easy_aiapi
-https://github.com/919975024/yy_easy_aiapi/blob/master/config.toml
+wget https://github.com/919975024/yy_easy_aiapi/blob/master/config.toml
 # 编辑配置 修改你参数
 vim config.toml
 
