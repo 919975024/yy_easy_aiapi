@@ -1,0 +1,24 @@
+[server]
+host = "0.0.0.0"
+port = 8080
+
+[database]
+url = "file://db/data.db"
+
+[admin]
+# 若未设置 api_token，则管理 API 无需鉴权（开发模式）
+# api_token = "yy_admin_secret_token"
+# username = "admin"
+# password = "strongpass"
+
+[concurrency]
+base_points_per_concurrent = 500
+
+[pricing]
+decimal_places = 4
+round_up = true
+multiplier = "1.0"
+
+[logging]
+# 启用后控制台输出 DEBUG 级别日志（含外部 HTTP 请求/响应全量详情）
+debug = false

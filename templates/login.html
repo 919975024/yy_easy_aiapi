@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} — yy_easy_aiapi</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .login-container {
+            background: #fff;
+            border-radius: 12px;
+            padding: 40px;
+            width: 400px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        .login-container h1 {
+            font-size: 24px;
+            text-align: center;
+            margin-bottom: 8px;
+            color: #1a1a2e;
+        }
+        .login-container p {
+            text-align: center;
+            color: #999;
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 13px;
+            color: #555;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #4361ee;
+            box-shadow: 0 0 0 3px rgba(67,97,238,0.15);
+        }
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            background: #4361ee;
+            color: #fff;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #3a56d4; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+            padding: 12px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 13px;
+            display: none;
+        }
+        .alert-error.show { display: block; }
+        .locked-msg {
+            text-align: center;
+            color: #e74c3c;
+            font-size: 14px;
+            margin-bottom: 16px;
+            padding: 12px;
+            background: #f8d7da;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1>yy_easy_aiapi</h1>
+        <p>管理员控制台</p>
+
+        {% if is_locked %}
+        <div class="locked-msg">
+            登录已被锁定，请 10 分钟后再试。
+        </div>
+        {% endif %}
+
+        <div class="alert-error" id="errorMsg"></div>
+
+        <form id="loginForm" onsubmit="handleLogin(event)">
+            <div class="form-group">
+                <label for="username">用户名</label>
+                <input type="text" id="username" name="username" placeholder="请输入用户名" required {% if is_locked %}disabled{% endif %}>
+            </div>
+            <div class="form-group">
+                <label for="password">密码</label>
+                <input type="password" id="password" name="password" placeholder="请输入密码" required {% if is_locked %}disabled{% endif %}>
+            </div>
+            <button type="submit" class="btn" id="loginBtn" {% if is_locked %}disabled{% endif %}>
+                {% if is_locked %}已锁定{% else %}登 录{% endif %}
+            </button>
+        </form>
+    </div>
+
+    <script>
+    async function handleLogin(e) {
+        e.preventDefault();
+        const btn = document.getElementById('loginBtn');
+        const errorEl = document.getElementById('errorMsg');
+        errorEl.classList.remove('show');
+
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value;
+
+        if (!username || !password) {
+            errorEl.textContent = '请输入用户名和密码';
+            errorEl.classList.add('show');
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = '登录中...';
+
+        try {
+            const res = await fetch('/yy_easy_aiapi/admin/login/api', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            const data = await res.json();
+
+            if (data.success) {
+                // 设置 session cookie（有效期 24 小时）
+                document.cookie = 'admin_session=' + data.session_token + '; path=/yy_easy_aiapi; max-age=86400; SameSite=Lax';
+                // 重定向到管理后台
+                window.location.href = '/yy_easy_aiapi/admin';
+            } else {
+                errorEl.textContent = data.message || data.error?.message || '登录失败';
+                errorEl.classList.add('show');
+                btn.disabled = false;
+                btn.textContent = '登 录';
+            }
+        } catch (err) {
+            errorEl.textContent = '网络错误，请重试';
+            errorEl.classList.add('show');
+            btn.disabled = false;
+            btn.textContent = '登 录';
+        }
+    }
+    </script>
+</body>
+</html>

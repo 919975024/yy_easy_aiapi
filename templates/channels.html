@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin-bottom:0">渠道列表 （渠道的正常价格）</h2>
+        <button class="btn btn-primary" onclick="showAddModal()">+ 新增渠道</button>
+    </div>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th><th>名称</th><th>厂商</th><th>标准</th>
+                <th>输入单价<br><span class="text-muted">元/百万Token</span></th>
+                <th>缓存单价<br><span class="text-muted">元/百万Token</span></th>
+                <th>输出单价<br><span class="text-muted">元/百万Token</span></th>
+                <th>价格参考</th><th>上游URL</th><th>连通测试</th><th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for ch in channels %}
+            <tr>
+                <td>{{ ch.id }}</td>
+                <td><strong>{{ ch.name }}</strong></td>
+                <td><span class="badge badge-green">{{ channel_type_labels[ch.channel_type] | default(value=ch.channel_type) }}</span></td>
+                <td>{{ ch.api_standard }}</td>
+                <td>{{ ch.price_input }}</td>
+                <td>{{ ch.price_cached }}</td>
+                <td>{{ ch.price_output }}</td>
+                <td>
+                    {% if ch.price_reference_url %}
+                    <a href="{{ ch.price_reference_url }}" target="_blank" class="text-muted" style="font-size:12px">参考价</a>
+                    {% else %}
+                    <span class="text-muted">—</span>
+                    {% endif %}
+                </td>
+                <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ ch.upstream_url }}">{{ ch.upstream_url }}</td>
+                <td>
+                    <button class="btn btn-sm" style="background:#f0f0f0" onclick="testChannel({{ ch.id }}, '{{ ch.channel_type }}')" id="test-btn-{{ ch.id }}">测试</button>
+                    <span id="test-result-{{ ch.id }}" style="margin-left:6px;font-size:12px"></span>
+                    <a id="console-link-{{ ch.id }}" href="#" target="_blank" style="display:none;margin-left:8px;font-size:12px;color:#3498db">查看余额</a>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-primary" onclick="showEditModal({{ ch.id }})" style="margin-right:4px">编辑</button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteChannel({{ ch.id }})">删除</button>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if channels | length == 0 %}
+            <tr><td colspan="11" style="text-align:center;color:#999">暂无渠道</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+
+<!-- 新增/编辑渠道弹窗 -->
+<div class="modal-overlay" id="channelModal">
+    <div class="modal">
+        <h3 id="modalTitle">新增渠道</h3>
+        <form id="channelForm" onsubmit="submitChannel(event)">
+            <input type="hidden" name="edit_id" id="edit_id" value="">
+            <div class="form-group"><label>渠道名 *</label><input name="name" id="ch_name" required placeholder="外部调用的模型名称 例如: yy-deepseek-chat"></div>
+            <div class="form-group">
+                <label>渠道类型 *</label>
+                <select name="channel_type" id="channel_type" onchange="onChannelTypeChange()" required>
+                    <option value="">— 请选择厂商 —</option>
+                    <option value="deepseek">DeepSeek</option>
+                    <option value="volcengine">火山引擎</option>
+                    <option value="qwen">阿里通义千问</option>
+                    <option value="baidu">百度千帆</option>
+                    <option value="tencent">腾讯混元</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic Claude</option>
+                    <option value="google">Google Gemini</option>
+                    <option value="custom">自定义</option>
+                </select>
+            </div>
+
+            <div class="form-group"><label>渠道模型</label><input name="model" id="ch_model" placeholder="上游实际调用的模型名，为空则用渠道名"></div>
+
+            <div class="form-group"><label>API 标准</label>
+                <select name="api_standard" id="ch_api_standard">
+                    <option value="openai">openai</option>
+                    <option value="anthropic">anthropic</option>
+                    <option value="custom">custom</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>价格参考链接</label>
+                <input name="price_reference_url" id="ch_price_reference_url" placeholder="选填：该厂商的价格页面链接">
+                <span class="text-muted">选择厂商后自动填充，也可手动修改</span>
+            </div>
+            <div class="form-row">
+                <div class="form-group"><label>输入单价（元/百万Token）</label><input name="price_input" id="ch_price_input" value="0" step="0.01" placeholder="例如: 10"></div>
+                <div class="form-group"><label>缓存单价（元/百万Token）</label><input name="price_cached" id="ch_price_cached" value="0" step="0.01" placeholder="例如: 5"></div>
+                <div class="form-group"><label>输出单价（元/百万Token）</label><input name="price_output" id="ch_price_output" value="0" step="0.01" placeholder="例如: 30"></div>
+            </div>
+
+            <div class="form-group"><label>上游 API 地址 *</label><input name="upstream_url" id="ch_upstream_url" required placeholder="https://api.openai.com/v1"></div>
+            <div class="form-group"><label>上游 API Key</label><input name="api_key" id="ch_api_key" placeholder="sk-..."></div>
+
+
+
+            <div style="display:flex;gap:12px;margin-top:16px">
+                <button type="submit" class="btn btn-primary">确认</button>
+                <button type="button" class="btn" style="background:#e0e0e0" onclick="hideChannelModal()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const CHANNEL_TYPES = {
+    'deepseek': { name: 'DeepSeek', api_standard: 'openai', upstream_url: 'https://api.deepseek.com/v1', price_url: 'https://api-docs.deepseek.com/zh-cn/quick_start/pricing', model: '', console_url: 'https://platform.deepseek.com' },
+    'volcengine': { name: '火山引擎', api_standard: 'openai', upstream_url: 'https://ark.cn-beijing.volces.com/api/v3', price_url: 'https://www.volcengine.com/docs/82379/1099320', model: '', console_url: 'https://console.volcengine.com/ark' },
+    'qwen': { name: '阿里通义千问', api_standard: 'openai', upstream_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', price_url: 'https://help.aliyun.com/zh/model-studio/getting-started/models', model: '', console_url: 'https://dashscope.console.aliyun.com' },
+    'baidu': { name: '百度千帆', api_standard: 'openai', upstream_url: 'https://qianfan.baidubce.com/v2', price_url: 'https://cloud.baidu.com/doc/WENXINWORKSHOP/s/hlrk4akp7', model: '', console_url: 'https://console.bce.baidu.com/billing/' },
+    'tencent': { name: '腾讯混元', api_standard: 'openai', upstream_url: 'https://api.hunyuan.cloud.tencent.com/v1', price_url: 'https://console.cloud.tencent.com/cam/hunyuan/price', model: '', console_url: 'https://console.cloud.tencent.com/expense' },
+    'openai': { name: 'OpenAI', api_standard: 'openai', upstream_url: 'https://api.openai.com/v1', price_url: 'https://openai.com/api/pricing/', model: '', console_url: 'https://platform.openai.com/usage' },
+    'anthropic': { name: 'Anthropic Claude', api_standard: 'anthropic', upstream_url: 'https://api.anthropic.com/v1', price_url: 'https://www.anthropic.com/pricing', model: '', console_url: 'https://console.anthropic.com' },
+    'google': { name: 'Google Gemini', api_standard: 'openai', upstream_url: 'https://generativelanguage.googleapis.com/v1beta/openai', price_url: 'https://ai.google.dev/pricing', model: '', console_url: 'https://console.cloud.google.com/billing' },
+    'custom': { name: '自定义', api_standard: 'openai', upstream_url: '', price_url: '', model: '', console_url: '' }
+};
+
+let channelsData = {{ channels | json_encode | safe }};
+
+function showAddModal() {
+    document.getElementById('modalTitle').textContent = '新增渠道';
+    document.getElementById('channelForm').reset();
+    document.getElementById('edit_id').value = '';
+    document.getElementById('channelModal').classList.add('show');
+}
+
+async function showEditModal(id) {
+    document.getElementById('modalTitle').textContent = '编辑渠道';
+    document.getElementById('edit_id').value = id;
+
+    const ch = channelsData.find(c => c.id === id);
+    if (!ch) return;
+
+    document.getElementById('channel_type').value = ch.channel_type || '';
+    document.getElementById('ch_name').value = ch.name;
+    document.getElementById('ch_model').value = ch.model || '';
+    document.getElementById('ch_api_standard').value = ch.api_standard;
+    document.getElementById('ch_price_input').value = ch.price_input;
+    document.getElementById('ch_price_cached').value = ch.price_cached;
+    document.getElementById('ch_price_output').value = ch.price_output;
+    document.getElementById('ch_upstream_url').value = ch.upstream_url;
+    document.getElementById('ch_api_key').value = ch.api_key;
+    document.getElementById('ch_price_reference_url').value = ch.price_reference_url || '';
+
+    document.getElementById('channelModal').classList.add('show');
+}
+
+function hideChannelModal() {
+    document.getElementById('channelModal').classList.remove('show');
+}
+
+function onChannelTypeChange() {
+    const type = document.getElementById('channel_type').value;
+    const info = CHANNEL_TYPES[type];
+    if (!info) return;
+
+    document.getElementById('ch_api_standard').value = info.api_standard;
+    if (info.upstream_url) {
+        document.getElementById('ch_upstream_url').value = info.upstream_url;
+    }
+    if (info.price_url) {
+        document.getElementById('ch_price_reference_url').value = info.price_url;
+    }
+    if (info.model) {
+        document.getElementById('ch_model').value = info.model;
+    }
+
+    if (type !== 'custom' && info.name) {
+        const nameField = document.getElementById('ch_name');
+        if (!nameField.value || nameField.dataset.autoFilled) {
+            nameField.placeholder = '例如: ' + type + '-chat';
+            nameField.dataset.autoFilled = 'true';
+        }
+    }
+}
+
+async function submitChannel(e) {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const editId = fd.get('edit_id');
+    fd.delete('edit_id');
+
+    const data = Object.fromEntries(fd.entries());
+
+    let url, method;
+    if (editId) {
+        url = '/yy_easy_aiapi/api/channels/' + editId;
+        method = 'PUT';
+    } else {
+        url = '/yy_easy_aiapi/api/channels';
+        method = 'POST';
+    }
+
+    const res = await fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+
+    if (res.ok) {
+        location.reload();
+    } else {
+        const j = await res.json();
+        const msg = (editId ? '更新' : '创建') + '失败: ' + (j.error?.message || j.message || '未知错误');
+        console.error('[渠道]', msg, j);
+        alert(msg);
+    }
+}
+
+async function testChannel(id, channelType) {
+    const btn = document.getElementById('test-btn-' + id);
+    const resultSpan = document.getElementById('test-result-' + id);
+    const consoleLink = document.getElementById('console-link-' + id);
+
+    // 显示 console 链接
+    const info = CHANNEL_TYPES[channelType];
+    if (info && info.console_url) {
+        consoleLink.href = info.console_url;
+        consoleLink.style.display = 'inline';
+    }
+
+    btn.disabled = true;
+    btn.textContent = '测试中...';
+    resultSpan.textContent = '';
+
+    try {
+        const res = await fetch('/yy_easy_aiapi/api/channels/' + id + '/test', { method: 'POST' });
+        const json = await res.json();
+
+        if (!json.success) {
+            resultSpan.innerHTML = '<span style="color:#e74c3c">' + (json.error?.message || '失败') + '</span>';
+            return;
+        }
+
+        const d = json.data;
+        if (d.ok) {
+            resultSpan.innerHTML = '<span style="color:#27ae60;font-weight:600">连通 ' + d.elapsed_ms + 'ms</span>';
+        } else {
+            resultSpan.innerHTML = '<span style="color:#e74c3c">不通 ' + d.elapsed_ms + 'ms' + (d.error_message ? ': ' + d.error_message : '') + '</span>';
+        }
+    } catch (e) {
+        resultSpan.innerHTML = '<span style="color:#e74c3c">网络错误</span>';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '重测';
+    }
+}
+
+async function deleteChannel(id) {
+    if (!confirm('确认删除渠道 #' + id + ' ？')) return;
+    const res = await fetch('/yy_easy_aiapi/api/channels/' + id, { method: 'DELETE' });
+    if (res.ok) {
+        location.reload();
+    } else {
+        const j = await res.json();
+        const msg = '删除失败: ' + (j.error?.message || j.message || '未知错误');
+        console.error('[渠道]', msg, j);
+        alert(msg);
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>流水查询</h2>
+    <form id="searchForm" onsubmit="searchTx(event)">
+        <div class="search-bar">
+            <div class="form-group"><label>Token</label><input name="token" placeholder="按 Token 筛选" style="font-family:monospace"></div>
+            <div class="form-group"><label>标签</label><input name="label" placeholder="按标签筛选"></div>
+            <div class="form-group"><label>开始时间</label><input name="start_time" type="datetime-local"></div>
+            <div class="form-group"><label>结束时间</label><input name="end_time" type="datetime-local"></div>
+            <div class="form-group"><label>每页</label><select name="page_size"><option value="10">10</option><option value="20" selected>20</option><option value="50">50</option></select></div>
+            <div class="form-group"><button type="submit" class="btn btn-primary">查询</button></div>
+        </div>
+    </form>
+    <div id="txResult"></div>
+</div>
+
+<script>
+let currentTxPage = 1;
+
+function goPage(p){
+    currentTxPage = p;
+    searchTx({preventDefault:()=>{}}, p);
+}
+
+async function searchTx(e, overridePage){
+    if(e && e.preventDefault) e.preventDefault();
+    const fd = new FormData(document.getElementById('searchForm'));
+    const params = new URLSearchParams();
+    for(const[k,v]of fd.entries()){if(v)params.set(k,v)}
+    const page = overridePage || currentTxPage;
+    params.set('page', String(page));
+    currentTxPage = page;
+    const res=await fetch('/yy_easy_aiapi/admin/transactions/api?'+params.toString());
+    const j=await res.json();
+    const el=document.getElementById('txResult');
+    if(res.ok&&j.data){
+        const d = j.data;
+        el.innerHTML='<table><thead><tr><th>ID</th><th>Token</th><th>前缀</th><th>标签</th><th>类型</th><th>金额</th><th>变更后余额</th><th>备注</th><th>输入Token</th><th>输入单价</th><th>缓存Token</th><th>缓存单价</th><th>输出Token</th><th>输出单价</th><th>倍率</th><th>渠道</th><th>操作者</th><th>时间</th></tr></thead><tbody>'
+            +d.items.map(tx=>'<tr><td>'+tx.id+'</td><td style="font-family:monospace;font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis">'+tx.token+'</td><td>'+tx.token_prefix+'</td><td>'+tx.label+'</td><td>'+
+                (tx.change_type==='recharge'?'<span class="badge badge-green">充值</span>':
+                 tx.change_type==='deduct'?'<span class="badge badge-red">扣减</span>':
+                 tx.change_type==='consume'?'<span class="badge badge-gray">消费</span>':tx.change_type)
+                +'</td><td>'+tx.amount+'</td><td>'+tx.balance_after+'</td>'
+                +'<td>'+(tx.remark||'')+'</td>'
+                +'<td>'+(tx.input_tokens||0)+'</td><td>'+(tx.input_price||'0')+'</td>'
+                +'<td>'+(tx.cached_tokens||0)+'</td><td>'+(tx.cached_price||'0')+'</td>'
+                +'<td>'+(tx.output_tokens||0)+'</td><td>'+(tx.output_price||'0')+'</td>'
+                +'<td>'+(tx.multiplier||'1.0')+'</td>'
+                +'<td>'+tx.channel_name+'</td><td>'+tx.operator+'</td><td style="font-size:11px">'+tx.created_at+'</td></tr>').join('')
+            +'</tbody></table>';
+
+        const totalPages = Math.ceil(d.total / d.page_size);
+        let pager = '<div style="margin-top:12px;font-size:13px;color:#666">共 '+d.total+' 条，第 '+d.page+'/'+totalPages+' 页 &nbsp; ';
+        if(d.page > 1){
+            pager += '<a href="#" onclick="goPage(1)" style="margin:0 4px">首页</a>';
+            pager += '<a href="#" onclick="goPage('+(d.page-1)+')" style="margin:0 4px">上一页</a>';
+        }
+        for(let p=Math.max(1,d.page-2); p<=Math.min(totalPages,d.page+2); p++){
+            if(p===d.page) pager += '<strong style="margin:0 4px">'+p+'</strong>';
+            else pager += '<a href="#" onclick="goPage('+p+')" style="margin:0 4px">'+p+'</a>';
+        }
+        if(d.page < totalPages){
+            pager += '<a href="#" onclick="goPage('+(d.page+1)+')" style="margin:0 4px">下一页</a>';
+            pager += '<a href="#" onclick="goPage('+totalPages+')" style="margin:0 4px">末页</a>';
+        }
+        pager += '</div>';
+        el.innerHTML += pager;
+    }else{console.error('[流水查询]',j.error?.message,j);el.innerHTML='<div class="alert alert-error">'+j.error?.message+'</div>'}
+}
+// 初始加载
+searchTx({preventDefault:()=>{}}, 1);
+</script>
+{% endblock %}

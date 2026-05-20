@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ title }} — yy_easy_aiapi</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; display: flex; min-height: 100vh; }
+        .sidebar { width: 220px; background: #1a1a2e; color: #fff; padding: 20px 0; flex-shrink: 0; }
+        .sidebar h1 { font-size: 18px; padding: 0 20px 20px; border-bottom: 1px solid #333; margin-bottom: 10px; }
+        .sidebar a { display: block; color: #ccc; padding: 12px 20px; text-decoration: none; font-size: 14px; }
+        .sidebar a:hover, .sidebar a.active { background: #16213e; color: #fff; }
+        .main { flex: 1; padding: 30px; overflow-y: auto; }
+        .card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .card h2 { margin-bottom: 16px; font-size: 18px; color: #333; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; font-size: 13px; }
+        th { background: #fafafa; color: #666; font-weight: 600; }
+        tr:hover { background: #f9f9f9; }
+        .btn { display: inline-block; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; text-decoration: none; }
+        .btn-primary { background: #4361ee; color: #fff; }
+        .btn-primary:hover { background: #3a56d4; }
+        .btn-danger { background: #e74c3c; color: #fff; }
+        .btn-danger:hover { background: #c0392b; }
+        .btn-sm { padding: 4px 10px; font-size: 12px; }
+        .form-group { margin-bottom: 12px; }
+        .form-group label { display: block; margin-bottom: 4px; font-size: 13px; color: #555; font-weight: 500; }
+        .form-group input, .form-group select { width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; }
+        .form-row { display: flex; gap: 12px; }
+        .form-row .form-group { flex: 1; }
+        .alert { padding: 12px 16px; border-radius: 4px; margin-bottom: 16px; font-size: 13px; }
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; }
+        .badge-green { background: #d4edda; color: #155724; }
+        .badge-red { background: #f8d7da; color: #721c24; }
+        .badge-gray { background: #e2e3e5; color: #383d41; }
+        .text-muted { color: #999; font-size: 12px; }
+        .search-bar { display: flex; gap: 12px; margin-bottom: 16px; align-items: flex-end; }
+        .search-bar .form-group { margin-bottom: 0; }
+        .pagination { display: flex; gap: 8px; margin-top: 16px; justify-content: center; }
+        .pagination span { padding: 6px 12px; background: #f0f0f0; border-radius: 4px; font-size: 13px; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-overlay.show { display: flex; }
+        .modal { background: #fff; border-radius: 8px; padding: 24px; width: 520px; max-height: 80vh; overflow-y: auto; }
+        .modal h3 { margin-bottom: 16px; }
+    </style>
+</head>
+<body>
+    <nav class="sidebar">
+        <h1>yy_easy_aiapi</h1>
+        <a href="/yy_easy_aiapi/admin" {% if active_page == "channels" %}class="active"{% endif %}>渠道管理</a>
+        <a href="/yy_easy_aiapi/admin/tokens" {% if active_page == "tokens" %}class="active"{% endif %}>Token 管理</a>
+        <a href="/yy_easy_aiapi/admin/recharge" {% if active_page == "recharge" %}class="active"{% endif %}>积分操作</a>
+        <a href="/yy_easy_aiapi/admin/transactions" {% if active_page == "transactions" %}class="active"{% endif %}>流水查询</a>
+        <a href="/yy_easy_aiapi/admin/pricing" {% if active_page == "pricing" %}class="active"{% endif %}>计费设置</a>
+        <div style="border-top:1px solid #333;margin-top:20px;padding-top:10px">
+            <a href="#" onclick="handleLogout(event)" style="color:#e74c3c">退出登录</a>
+        </div>
+    </nav>
+    <main class="main">
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+    async function handleLogout(e) {
+        e.preventDefault();
+        if (!confirm('确认退出登录？')) return;
+        try {
+            const res = await fetch('/yy_easy_aiapi/admin/logout/api', { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+                // 清除 cookie
+                document.cookie = 'admin_session=; path=/yy_easy_aiapi; max-age=0; SameSite=Lax';
+                window.location.href = '/yy_easy_aiapi/admin/login';
+            }
+        } catch (err) {
+            console.error('[退出登录]', err);
+            alert('退出失败');
+        }
+    }
+    </script>
+</body>
+</html>

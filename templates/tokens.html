@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h2 style="margin-bottom:0">Token 列表</h2>
+        <button class="btn btn-primary" onclick="showGenModal()">+ 生成 Token</button>
+    </div>
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+        <label style="font-size:13px">每页</label>
+        <select id="pageSize" onchange="loadTokens(1)" style="width:80px;padding:4px 8px;border:1px solid #ddd;border-radius:4px">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+        </select>
+    </div>
+    <div id="tokenTable"></div>
+    <div id="tokenPager" style="margin-top:12px;font-size:13px;color:#666"></div>
+</div>
+
+<!-- 生成 Token 弹窗 -->
+<div class="modal-overlay" id="genModal">
+    <div class="modal">
+        <h3>生成 Token</h3>
+        <p class="text-muted">Token 格式: <strong>{{ port }}_</strong>{uuid}</p>
+        <form id="genForm" onsubmit="submitGen(event)">
+            <div class="form-group"><label>标签（label）*</label><input name="label" required placeholder="例如: team_a"></div>
+            <p class="text-muted" style="margin-bottom:12px">Token 生成后默认可使用<strong>所有渠道</strong>，无需绑定特定渠道。</p>
+            <div style="display:flex;gap:12px;margin-top:16px">
+                <button type="submit" class="btn btn-primary">确认生成</button>
+                <button type="button" class="btn" style="background:#e0e0e0" onclick="hideGenModal()">取消</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+let currentPage = 1;
+
+function showGenModal(){document.getElementById('genModal').classList.add('show')}
+function hideGenModal(){document.getElementById('genModal').classList.remove('show')}
+
+async function submitGen(e){
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const data=Object.fromEntries(fd.entries());
+    const res=await fetch('/yy_easy_aiapi/api/token/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    if(res.ok){hideGenModal();loadTokens(currentPage)}else{const j=await res.json();const msg='生成失败: '+j.error?.message;console.error('[Token]',msg,j);alert(msg)}
+}
+
+async function deleteToken(token){
+    if(!confirm('确认删除 Token '+token+' ？'))return;
+    const res=await fetch('/yy_easy_aiapi/api/tokens/'+encodeURIComponent(token),{method:'DELETE'});
+    if(res.ok){loadTokens(currentPage)}else{const j=await res.json();const msg='删除失败: '+j.error?.message;console.error('[Token]',msg,j);alert(msg)}
+}
+
+async function loadTokens(page){
+    currentPage = page;
+    const pageSize = document.getElementById('pageSize').value;
+    const res = await fetch('/yy_easy_aiapi/api/tokens?page='+page+'&page_size='+pageSize);
+    const j = await res.json();
+    const el = document.getElementById('tokenTable');
+    const pager = document.getElementById('tokenPager');
+    if(!res.ok || !j.data){el.innerHTML='<div class="alert alert-error">加载失败</div>';return}
+
+    const d = j.data;
+    const rows = d.items.map(t => '<tr>'+
+        '<td>'+t.id+'</td>'+
+        '<td style="font-family:monospace;font-size:12px;max-width:240px;overflow:hidden;text-overflow:ellipsis">'+t.token+'</td>'+
+        '<td>'+t.label+'</td>'+
+        '<td>'+t.balance+'</td>'+
+        '<td>'+t.max_concurrent+'</td>'+
+        '<td>'+t.created_at+'</td>'+
+        '<td><button class="btn btn-sm btn-danger" onclick="deleteToken(\''+t.token+'\')">删除</button></td>'+
+        '</tr>').join('');
+
+    el.innerHTML = '<table><thead><tr><th>ID</th><th>Token</th><th>标签</th><th>余额</th><th>并发上限</th><th>创建时间</th><th>操作</th></tr></thead><tbody>'
+        + (rows || '<tr><td colspan="7" style="text-align:center;color:#999">暂无 Token</td></tr>')
+        + '</tbody></table>';
+
+    const totalPages = Math.ceil(d.total / d.page_size);
+    let pagerHtml = '共 '+d.total+' 条，第 '+d.page+'/'+totalPages+' 页 &nbsp; ';
+    if(d.page > 1){
+        pagerHtml += '<a href="#" onclick="loadTokens(1)" style="margin:0 4px">首页</a>';
+        pagerHtml += '<a href="#" onclick="loadTokens('+(d.page-1)+')" style="margin:0 4px">上一页</a>';
+    }
+    for(let p=Math.max(1,d.page-2); p<=Math.min(totalPages,d.page+2); p++){
+        if(p===d.page) pagerHtml += '<strong style="margin:0 4px">'+p+'</strong>';
+        else pagerHtml += '<a href="#" onclick="loadTokens('+p+')" style="margin:0 4px">'+p+'</a>';
+    }
+    if(d.page < totalPages){
+        pagerHtml += '<a href="#" onclick="loadTokens('+(d.page+1)+')" style="margin:0 4px">下一页</a>';
+        pagerHtml += '<a href="#" onclick="loadTokens('+totalPages+')" style="margin:0 4px">末页</a>';
+    }
+    pager.innerHTML = pagerHtml;
+}
+
+// 初始加载
+loadTokens(1);
+</script>
+{% endblock %}

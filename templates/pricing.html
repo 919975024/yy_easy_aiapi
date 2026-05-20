@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>计费设置</h2>
+    <p class="text-muted">费用计算公式：最终价格 = 渠道价格 × 倍率 × 100（对所有渠道生效）</p>
+    <form id="pricingForm" onsubmit="updatePricing(event)">
+        <div class="form-row">
+            <div class="form-group">
+                <label>全局倍率（multiplier）</label>
+                <input name="multiplier" id="multiplierInput" value="{{ multiplier }}" step="0.01" required>
+            </div>
+        </div>
+        <button type="submit" class="btn btn-primary">保存设置</button>
+        <span id="result" style="result" style="margin-left:16px;font-size:13px"></span>
+    </form>
+</div>
+
+<script>
+async function updatePricing(e){
+    e.preventDefault();
+    const multiplier = document.getElementById('multiplierInput').value;
+    const res = await fetch('/yy_easy_aiapi/admin/pricing/api', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({multiplier})
+    });
+    const j = await res.json();
+    const el = document.getElementById('result');
+    if (res.ok) {
+        el.innerHTML = '<span style="color:green">' + j.data.message + '</span>';
+    } else {
+        console.error('[计费设置]', j.error?.message || '保存失败', j);
+        el.innerHTML = '<span style="color:red">' + (j.error?.message || '保存失败') + '</span>';
+    }
+}
+</script>
+{% endblock %}

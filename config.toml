@@ -1,0 +1,33 @@
+[server]
+host = "0.0.0.0"
+port = 7001
+
+[database]
+url = "file://db/data.db?sync=none&checkpoint_interval=60&temp_directory=file://db/tmp"
+
+[admin]
+# api_token: 所有 API（/api/* 和 /admin/*/api）的鉴权 Token
+# 若未设置 api_token，则所有 API 无需鉴权（开放访问）
+api_token = "token001"
+
+# username/password: admin 页面登录凭据
+# 若 username 为空，则 admin 页面无需登录
+# 连续 5 次错误登录将锁定 10 分钟（重启程序重置）
+username = "admin"
+password = "admin"
+
+[concurrency]
+base_points_per_concurrent = 500
+
+[pricing]
+decimal_places = 4
+round_up = true
+multiplier = "1.0"
+
+[logging]
+# 启用 debug 模式后，控制台和日志文件会输出 DEBUG 级别的日志
+# 包括外部 HTTP 请求的完整 URL、响应体、耗时等信息
+debug = true
+
+# AI Mock 模式：不请求上游渠道，直接模拟返回 usage（prompt/cached/output 均为 10 tokens）
+aimock = true

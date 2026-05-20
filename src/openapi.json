@@ -1,0 +1,1310 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "yy_easy_aiapi — AI 代理网关 API",
+    "description": "轻量级 AI 代理网关，提供统一的 AI 接口调用、渠道管理、Token 鉴权与计费能力。\n\n## 鉴权方式\n\n### 1. TokenAuth（AI 代理鉴权）\n用于调用 AI 聊天补全接口。在请求头中添加：\n```\nAuthorization: Bearer {系统生成的Token}\n```\n\n### 2. ApiTokenAuth（管理 API 鉴权）\n用于调用所有渠道管理、Token 管理、积分操作、流水查询、计费设置接口。在请求头中添加：\n```\nAuthorization: Bearer {api_token}\n```\n\n## 统一响应格式\n所有 API 响应均为标准 JSON 格式：\n```json\n{\n  \"success\": true,\n  \"data\": { ... },\n  \"error\": null,\n  \"message\": null\n}\n```\n\n错误响应：\n```json\n{\n  \"success\": false,\n  \"data\": null,\n  \"error\": {\n    \"code\": 401,\n    \"message\": \"错误描述\"\n  },\n  \"message\": \"错误描述\"\n}\n```\n\n## 计费公式\n**最终价格 = 渠道价格 × 倍率 × 100**\n\n其中：\n- 渠道价格：各渠道中配置的单价（元/单位）\n- 倍率：在计费设置中配置的全局倍率（默认 1.0）\n- 最终价格以积分为单位（1 元 = 100 积分）",
+    "version": "1.0.0",
+    "contact": {
+      "name": "yy_easy_aiapi"
+    }
+  },
+  "servers": [
+    {
+      "url": "/yy_easy_aiapi",
+      "description": "yy_easy_aiapi API 基础路径（部署时需包含此前缀）"
+    }
+  ],
+  "tags": [
+    { "name": "AI 代理", "description": "AI 聊天补全接口（兼容 OpenAI 格式），使用系统生成的 Token 鉴权" },
+    { "name": "渠道管理", "description": "渠道的增删改查管理" },
+    { "name": "Token 管理", "description": "API Token 的生成、查询和删除" },
+    { "name": "积分管理", "description": "Token 的充值与扣减操作" },
+    { "name": "流水查询", "description": "查询积分变动流水" },
+    { "name": "计费设置", "description": "配置全局计费倍率" },
+    { "name": "管理员认证", "description": "管理后台的登录与登出" }
+  ],
+  "paths": {
+    "/v1/chat/completions": {
+      "post": {
+        "tags": ["AI 代理"],
+        "summary": "AI 聊天补全",
+        "description": "兼容 OpenAI 格式的聊天补全接口，支持流式（SSE）和非流式返回。\n\n- 模型名称（model）使用**渠道名**进行路由\n- 流式返回使用 Server-Sent Events（SSE）协议\n- 自动扣减 Token 余额\n- 自动记录计费流水\n\n### 请求示例\n```json\n{\n  \"model\": \"gpt-4o\",\n  \"messages\": [\n    {\"role\": \"system\", \"content\": \"你是一个有用的助手\"},\n    {\"role\": \"user\", \"content\": \"你好，请介绍一下你自己\"}\n  ],\n  \"stream\": false\n}\n```",
+        "operationId": "chatCompletions",
+        "security": [{ "TokenAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["model", "messages"],
+                "properties": {
+                  "model": {
+                    "type": "string",
+                    "description": "模型名称，对应**渠道名**。系统会根据此名称路由到对应的上游渠道",
+                    "example": "gpt-4o"
+                  },
+                  "messages": {
+                    "type": "array",
+                    "description": "对话消息列表",
+                    "items": {
+                      "type": "object",
+                      "required": ["role", "content"],
+                      "properties": {
+                        "role": {
+                          "type": "string",
+                          "description": "消息角色",
+                          "enum": ["system", "user", "assistant"],
+                          "example": "user"
+                        },
+                        "content": {
+                          "type": "string",
+                          "description": "消息内容",
+                          "example": "你好，请介绍一下你自己"
+                        }
+                      }
+                    }
+                  },
+                  "stream": {
+                    "type": "boolean",
+                    "description": "是否使用流式返回。设为 true 时返回 SSE 流，false 时返回完整 JSON",
+                    "default": false,
+                    "example": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功响应。非流式返回完整 JSON；流式返回 SSE 事件流",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "兼容 OpenAI 的聊天补全响应格式",
+                  "properties": {
+                    "id": { "type": "string", "description": "请求唯一标识" },
+                    "object": { "type": "string", "description": "响应类型，固定为 chat.completion" },
+                    "created": { "type": "integer", "description": "创建时间戳" },
+                    "model": { "type": "string", "description": "使用的模型名称" },
+                    "choices": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "index": { "type": "integer" },
+                          "message": {
+                            "type": "object",
+                            "properties": {
+                              "role": { "type": "string" },
+                              "content": { "type": "string" }
+                            }
+                          },
+                          "finish_reason": { "type": "string" }
+                        }
+                      }
+                    },
+                    "usage": {
+                      "type": "object",
+                      "properties": {
+                        "prompt_tokens": { "type": "integer" },
+                        "completion_tokens": { "type": "integer" },
+                        "total_tokens": { "type": "integer" }
+                      }
+                    }
+                  }
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "type": "string",
+                  "description": "SSE 事件流，每个事件为 data: {json}\\n\\n 格式"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": {
+            "description": "鉴权失败 - Token 无效或未提供",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "403": {
+            "description": "余额不足或并发超限",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "请求频率超限",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "500": {
+            "description": "服务器内部错误",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/channels": {
+      "get": {
+        "tags": ["渠道管理"],
+        "summary": "获取渠道列表",
+        "description": "获取所有已配置的 AI 渠道列表。每个渠道代表一个上游 AI 服务提供商。\n\n### 响应示例\n```json\n{\n  \"success\": true,\n  \"data\": [\n    {\n      \"id\": 1,\n      \"name\": \"gpt-4o\",\n      \"api_standard\": \"openai\",\n      \"price_input\": \"0.01\",\n      \"price_cached\": \"0.005\",\n      \"price_output\": \"0.03\",\n      \"rate_input\": \"1.0\",\n      \"rate_cached\": \"1.0\",\n      \"rate_output\": \"1.0\",\n      \"upstream_url\": \"https://api.openai.com/v1\",\n      \"api_key\": \"sk-xxx\",\n      \"created_at\": \"2025-01-01T00:00:00\",\n      \"updated_at\": \"2025-01-01T00:00:00\"\n    }\n  ]\n}\n```",
+        "operationId": "listChannels",
+        "security": [{ "ApiTokenAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功返回渠道列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/ChannelInfo" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["渠道管理"],
+        "summary": "创建渠道",
+        "description": "创建一个新的 AI 渠道。创建成功后返回完整的渠道信息。\n\n### 请求示例\n```json\n{\n  \"name\": \"gpt-4o\",\n  \"api_standard\": \"openai\",\n  \"price_input\": \"0.01\",\n  \"price_cached\": \"0.005\",\n  \"price_output\": \"0.03\",\n  \"rate_input\": \"1.0\",\n  \"rate_cached\": \"1.0\",\n  \"rate_output\": \"1.0\",\n  \"upstream_url\": \"https://api.openai.com/v1\",\n  \"api_key\": \"sk-xxx\"\n}\n```",
+        "operationId": "createChannel",
+        "security": [{ "ApiTokenAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name", "upstream_url"],
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "渠道名称（也作为 AI 调用时的模型名）",
+                    "example": "deepseek-chat",
+                    "minLength": 1
+                  },
+                  "api_standard": {
+                    "type": "string",
+                    "description": "API 协议标准",
+                    "default": "openai",
+                    "example": "openai"
+                  },
+                  "price_input": {
+                    "type": "string",
+                    "description": "输入单价（元/百万Token）",
+                    "default": "0",
+                    "example": "10"
+                  },
+                  "price_cached": {
+                    "type": "string",
+                    "description": "缓存命中单价（元/百万Token）",
+                    "default": "0",
+                    "example": "5"
+                  },
+                  "price_output": {
+                    "type": "string",
+                    "description": "输出单价（元/百万Token）",
+                    "default": "0",
+                    "example": "30"
+                  },
+                  "rate_input": {
+                    "type": "string",
+                    "description": "输入 Token 汇率（将上游 Token 数转换为标准 Token 数）",
+                    "default": "1.0",
+                    "example": "1.0"
+                  },
+                  "rate_cached": {
+                    "type": "string",
+                    "description": "缓存 Token 汇率",
+                    "default": "1.0",
+                    "example": "1.0"
+                  },
+                  "rate_output": {
+                    "type": "string",
+                    "description": "输出 Token 汇率",
+                    "default": "1.0",
+                    "example": "1.0"
+                  },
+                  "upstream_url": {
+                    "type": "string",
+                    "description": "上游 API 地址",
+                    "example": "https://api.deepseek.com/v1",
+                    "minLength": 1
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "description": "上游 API 密钥",
+                    "default": "",
+                    "example": "sk-xxx"
+                  },
+                  "channel_type": {
+                    "type": "string",
+                    "description": "渠道厂商类型（deepseek/volcengine/qwen/baidu/tencent/openai/anthropic/google/custom）",
+                    "default": "custom",
+                    "example": "deepseek"
+                  },
+                  "price_reference_url": {
+                    "type": "string",
+                    "description": "计费价格参考链接",
+                    "default": "",
+                    "example": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "上游实际调用的模型名（为空则使用渠道名）",
+                    "default": "",
+                    "example": "deepseek-chat"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "创建成功，返回新创建的渠道信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/ChannelInfo" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/channels/{id}": {
+      "put": {
+        "tags": ["渠道管理"],
+        "summary": "更新渠道",
+        "description": "更新指定渠道的配置信息。只需传入需要更新的字段，未传入的字段保持不变。\n\n### 请求示例\n```json\n{\n  \"price_input\": \"0.02\",\n  \"price_output\": \"0.04\"\n}\n```",
+        "operationId": "updateChannel",
+        "security": [{ "ApiTokenAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "渠道 ID",
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "需要更新的字段，所有字段均为可选",
+                "properties": {
+                  "api_standard": {
+                    "type": "string",
+                    "description": "API 协议标准",
+                    "example": "openai"
+                  },
+                  "price_input": {
+                    "type": "string",
+                    "description": "输入单价（元/百万Token）",
+                    "example": "10"
+                  },
+                  "price_cached": {
+                    "type": "string",
+                    "description": "缓存命中单价（元/百万Token）",
+                    "example": "5"
+                  },
+                  "price_output": {
+                    "type": "string",
+                    "description": "输出单价（元/百万Token）",
+                    "example": "30"
+                  },
+                  "rate_input": {
+                    "type": "string",
+                    "description": "输入 Token 汇率",
+                    "example": "1.5"
+                  },
+                  "rate_cached": {
+                    "type": "string",
+                    "description": "缓存 Token 汇率",
+                    "example": "1.0"
+                  },
+                  "rate_output": {
+                    "type": "string",
+                    "description": "输出 Token 汇率",
+                    "example": "1.5"
+                  },
+                  "upstream_url": {
+                    "type": "string",
+                    "description": "上游 API 地址",
+                    "example": "https://api.deepseek.com/v1"
+                  },
+                  "api_key": {
+                    "type": "string",
+                    "description": "上游 API 密钥",
+                    "example": "sk-xxx"
+                  },
+                  "channel_type": {
+                    "type": "string",
+                    "description": "渠道厂商类型（deepseek/volcengine/qwen/baidu/tencent/openai/anthropic/google/custom）",
+                    "example": "deepseek"
+                  },
+                  "price_reference_url": {
+                    "type": "string",
+                    "description": "计费价格参考链接",
+                    "example": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing"
+                  },
+                  "model": {
+                    "type": "string",
+                    "description": "上游实际调用的模型名（为空则使用渠道名）",
+                    "example": "deepseek-chat"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功，返回更新后的渠道信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/ChannelInfo" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "tags": ["渠道管理"],
+        "summary": "删除渠道",
+        "description": "删除指定的渠道。删除后该渠道将无法用于 AI 调用。",
+        "operationId": "deleteChannel",
+        "security": [{ "ApiTokenAuth": [] }],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "要删除的渠道 ID",
+            "schema": { "type": "integer", "format": "int64", "example": 1 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "deleted": { "type": "boolean", "example": true },
+                        "id": { "type": "integer", "example": 1 }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/token/generate": {
+      "post": {
+        "tags": ["Token 管理"],
+        "summary": "生成 Token",
+        "description": "生成一个新的 API Token，用于 AI 代理鉴权。Token 可使用所有已配置的渠道，无需绑定特定渠道。\n\n### 请求示例\n```json\n{\n  \"label\": \"我的应用\"\n}\n```\n\n### 响应示例\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"token\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"label\": \"我的应用\",\n    \"balance\": \"0\"\n  }\n}\n```",
+        "operationId": "generateToken",
+        "security": [{ "ApiTokenAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["label"],
+                "properties": {
+                  "label": {
+                    "type": "string",
+                    "description": "Token 标签，用于标识用途",
+                    "example": "我的应用",
+                    "minLength": 1
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "生成成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/TokenGenerated" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/tokens": {
+      "get": {
+        "tags": ["Token 管理"],
+        "summary": "获取 Token 列表",
+        "description": "获取所有已生成的 Token 列表，包含余额、并发限制等信息。",
+        "operationId": "listTokens",
+        "security": [{ "ApiTokenAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功返回 Token 列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/TokenInfo" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/tokens/{token}": {
+      "delete": {
+        "tags": ["Token 管理"],
+        "summary": "删除 Token",
+        "description": "删除（软删除）指定的 Token。删除后该 Token 将无法再用于 AI 代理鉴权。",
+        "operationId": "deleteToken",
+        "security": [{ "ApiTokenAuth": [] }],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "description": "要删除的 Token 值（UUID 格式）",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "删除成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "deleted": { "type": "boolean", "example": true },
+                        "token": {
+                          "type": "string",
+                          "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/token/recharge": {
+      "post": {
+        "tags": ["积分管理"],
+        "summary": "Token 充值",
+        "description": "为指定 Token 充值积分。金额为字符串类型以支持高精度数值。\n\n### 请求示例\n```json\n{\n  \"token\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n  \"amount\": \"1000\"\n}\n```\n\n### 响应示例\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"success\": true,\n    \"message\": \"充值成功，当前余额: 1000\"\n  }\n}\n```",
+        "operationId": "rechargeToken",
+        "security": [{ "ApiTokenAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "amount"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "要充值的 Token 值",
+                    "format": "uuid",
+                    "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "充值金额（整数或小数，支持高精度）",
+                    "example": "1000"
+                  },
+                  "remark": {
+                    "type": "string",
+                    "description": "备注（默认为 管理员操作）",
+                    "default": "管理员操作",
+                    "example": "管理员操作"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "充值成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/OperationResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "金额格式错误或 Token 无效",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/token/deduct": {
+      "post": {
+        "tags": ["积分管理"],
+        "summary": "Token 扣减",
+        "description": "从指定 Token 中扣减积分。如果余额不足会返回错误。\n\n### 请求示例\n```json\n{\n  \"token\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n  \"amount\": \"500\"\n}\n```",
+        "operationId": "deductToken",
+        "security": [{ "ApiTokenAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["token", "amount"],
+                "properties": {
+                  "token": {
+                    "type": "string",
+                    "description": "要扣减的 Token 值",
+                    "format": "uuid",
+                    "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                  },
+                  "amount": {
+                    "type": "string",
+                    "description": "扣减金额（整数或小数，支持高精度）",
+                    "example": "500"
+                  },
+                  "remark": {
+                    "type": "string",
+                    "description": "备注（默认为 管理员操作）",
+                    "default": "管理员操作",
+                    "example": "管理员操作"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "扣减成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/OperationResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "余额不足或金额格式错误",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/token/balance": {
+      "get": {
+        "tags": ["积分管理"],
+        "summary": "查询 Token 余额",
+        "description": "查询指定 Token 或标签下的余额信息。可以通过 token 或 label 参数查询。\n\n### 按 Token 查询\n```\nGET /api/token/balance?token=a1b2c3d4-...\n```\n\n### 按标签查询\n```\nGET /api/token/balance?label=我的应用\n```\n\n### 响应示例\n```json\n{\n  \"success\": true,\n  \"data\": [\n    {\n      \"token\": \"a1b2c3d4-...\",\n      \"label\": \"我的应用\",\n      \"balance\": \"5000\",\n      \"deleted\": false,\n      \"max_concurrent\": 5\n    }\n  ]\n}\n```",
+        "operationId": "getBalance",
+        "security": [{ "ApiTokenAuth": [] }],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "description": "Token 值（UUID 格式）。与 label 二选一",
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+            }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "description": "Token 标签。与 token 二选一",
+            "schema": {
+              "type": "string",
+              "example": "我的应用"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回余额信息",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/BalanceInfo" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "缺少 token 或 label 参数",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/token/transactions": {
+      "get": {
+        "tags": ["流水查询"],
+        "summary": "查询积分流水（非管理员）",
+        "description": "分页查询积分变动流水，返回基本字段信息（不包含计费详情）。\n\n### 请求示例\n```\nGET /api/token/transactions?token=xxx&page=1&page_size=20\n```",
+        "operationId": "listTransactions",
+        "security": [{ "ApiTokenAuth": [] }],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "description": "按 Token 筛选",
+            "schema": { "type": "string", "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "description": "按标签筛选",
+            "schema": { "type": "string", "example": "我的应用" }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "required": false,
+            "description": "开始时间（ISO 8601 格式）",
+            "schema": { "type": "string", "format": "date-time", "example": "2025-01-01T00:00:00" }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "required": false,
+            "description": "结束时间（ISO 8601 格式）",
+            "schema": { "type": "string", "format": "date-time", "example": "2025-12-31T23:59:59" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "页码，从 1 开始",
+            "schema": { "type": "integer", "default": 1, "minimum": 1, "example": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "每页条数，最大 100",
+            "schema": { "type": "integer", "default": 20, "maximum": 100, "minimum": 1, "example": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回流水列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/TransactionPage" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/admin/transactions/api": {
+      "get": {
+        "tags": ["流水查询"],
+        "summary": "查询积分流水（管理员）",
+        "description": "管理员专用：分页查询积分变动流水，返回所有字段（含计费详情：input_tokens、cached_tokens、output_tokens 和各价格字段）。\n\n### 请求示例\n```\nGET /admin/transactions/api?token=xxx&page=1&page_size=20\n```",
+        "operationId": "adminListTransactions",
+        "security": [{ "ApiTokenAuth": [] }],
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "required": false,
+            "description": "按 Token 筛选",
+            "schema": { "type": "string", "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890" }
+          },
+          {
+            "name": "label",
+            "in": "query",
+            "required": false,
+            "description": "按标签筛选",
+            "schema": { "type": "string", "example": "我的应用" }
+          },
+          {
+            "name": "start_time",
+            "in": "query",
+            "required": false,
+            "description": "开始时间（ISO 8601 格式）",
+            "schema": { "type": "string", "format": "date-time", "example": "2025-01-01T00:00:00" }
+          },
+          {
+            "name": "end_time",
+            "in": "query",
+            "required": false,
+            "description": "结束时间（ISO 8601 格式）",
+            "schema": { "type": "string", "format": "date-time", "example": "2025-12-31T23:59:59" }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "页码，从 1 开始",
+            "schema": { "type": "integer", "default": 1, "minimum": 1, "example": 1 }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "description": "每页条数，最大 100",
+            "schema": { "type": "integer", "default": 20, "maximum": 100, "minimum": 1, "example": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功返回含计费详情的流水列表",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/AdminTransactionPage" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/admin/pricing/api": {
+      "get": {
+        "tags": ["计费设置"],
+        "summary": "获取计费倍率",
+        "description": "获取当前的全局计费倍率。\n\n### 响应示例\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"multiplier\": \"1.0\"\n  }\n}\n```",
+        "operationId": "getPricing",
+        "security": [{ "ApiTokenAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "成功返回计费倍率",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "multiplier": {
+                          "type": "string",
+                          "description": "当前全局倍率",
+                          "example": "1.0"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "post": {
+        "tags": ["计费设置"],
+        "summary": "更新计费倍率",
+        "description": "更新全局计费倍率。\n\n**计费公式：最终价格 = 渠道价格 × 倍率 × 100**\n\n### 请求示例\n```json\n{\n  \"multiplier\": \"1.5\"\n}\n```\n\n### 响应示例\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"success\": true,\n    \"message\": \"倍率已更新为 1.5\"\n  }\n}\n```",
+        "operationId": "updatePricing",
+        "security": [{ "ApiTokenAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["multiplier"],
+                "properties": {
+                  "multiplier": {
+                    "type": "string",
+                    "description": "新的全局倍率值（有效的正数）",
+                    "example": "1.5"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "更新成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "data": { "$ref": "#/components/schemas/OperationResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "倍率格式无效",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/admin/login": {
+      "get": {
+        "tags": ["管理员认证"],
+        "summary": "管理员登录页面",
+        "description": "返回管理员登录页面的 HTML。当配置了用户名时，访问管理后台前需先在此页面登录。",
+        "operationId": "loginPage",
+        "responses": {
+          "200": {
+            "description": "成功返回登录页面 HTML",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string",
+                  "description": "管理员登录页面 HTML"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/login/api": {
+      "post": {
+        "tags": ["管理员认证"],
+        "summary": "管理员登录 API",
+        "description": "管理员登录认证。\n\n- 连续 5 次登录失败将锁定 10 分钟\n- 锁定状态在程序重启后重置\n- 登录成功后需将 session_token 存入 Cookie（key: admin_session）\n\n### 请求示例\n```json\n{\n  \"username\": \"admin\",\n  \"password\": \"your_password\"\n}\n```\n\n### 响应示例（成功）\n```json\n{\n  \"success\": true,\n  \"message\": \"登录成功\",\n  \"session_token\": \"uuid-string\"\n}\n```\n\n### 响应示例（失败）\n```json\n{\n  \"success\": false,\n  \"error\": {\n    \"code\": 401,\n    \"message\": \"用户名或密码错误，剩余尝试次数: 4\"\n  }\n}\n```",
+        "operationId": "loginApi",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["username", "password"],
+                "properties": {
+                  "username": {
+                    "type": "string",
+                    "description": "管理员用户名（需在配置文件中设置）",
+                    "example": "admin"
+                  },
+                  "password": {
+                    "type": "string",
+                    "description": "管理员密码",
+                    "format": "password",
+                    "example": "your_password"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "登录成功，返回 session_token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "session_token": {
+                      "type": "string",
+                      "description": "会话 Token，需存入 Cookie（key: admin_session）",
+                      "example": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                    },
+                    "message": { "type": "string", "example": "登录成功" }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "用户名或密码错误",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          },
+          "429": {
+            "description": "登录已锁定（连续 5 次错误，锁定 10 分钟）",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/logout/api": {
+      "post": {
+        "tags": ["管理员认证"],
+        "summary": "管理员登出 API",
+        "description": "管理员登出，清除当前会话。\n\n### 响应示例\n```json\n{\n  \"success\": true,\n  \"message\": \"已退出登录\"\n}\n```",
+        "operationId": "logoutApi",
+        "responses": {
+          "200": {
+            "description": "登出成功",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "已退出登录" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "TokenAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "AI 代理鉴权。使用系统生成的 Token（UUID 格式）。\n\n请求头格式：\n```\nAuthorization: Bearer {token}\n```\n\nToken 通过管理 API（POST /api/token/generate）生成。"
+      },
+      "ApiTokenAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "UUID",
+        "description": "管理 API 鉴权。使用配置的 api_token（UUID 格式）。\n\n请求头格式：\n```\nAuthorization: Bearer {api_token}\n```\n\napi_token 在 config.toml 的 [admin] 节中配置。\n\n此 Token 可用于所有 /api/* 和 /admin/*/api 接口。"
+      }
+    },
+    "schemas": {
+      "ChannelInfo": {
+        "type": "object",
+        "description": "渠道信息",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "description": "渠道 ID", "example": 1 },
+          "name": { "type": "string", "description": "渠道名称（用于匹配 AI 请求中的 model 参数）", "example": "gpt-4o" },
+          "api_standard": { "type": "string", "description": "API 协议标准", "example": "openai" },
+          "price_input": { "type": "string", "description": "输入单价（元/百万Token）", "example": "10" },
+          "price_cached": { "type": "string", "description": "缓存命中单价（元/百万Token）", "example": "5" },
+          "price_output": { "type": "string", "description": "输出单价（元/百万Token）", "example": "30" },
+          "rate_input": { "type": "string", "description": "输入 Token 汇率", "example": "1.0" },
+          "rate_cached": { "type": "string", "description": "缓存 Token 汇率", "example": "1.0" },
+          "rate_output": { "type": "string", "description": "输出 Token 汇率", "example": "1.0" },
+          "upstream_url": { "type": "string", "description": "上游 API 地址", "example": "https://api.deepseek.com/v1" },
+          "api_key": { "type": "string", "description": "上游 API 密钥", "example": "sk-xxx" },
+          "channel_type": { "type": "string", "description": "渠道厂商类型（deepseek/volcengine/qwen/baidu/tencent/openai/anthropic/google/custom）", "example": "deepseek" },
+          "price_reference_url": { "type": "string", "description": "计费价格参考链接", "example": "https://api-docs.deepseek.com/zh-cn/quick_start/pricing" },
+          "model": { "type": "string", "description": "上游实际调用的模型名（为空则使用渠道名）", "example": "deepseek-chat" },
+          "created_at": { "type": "string", "format": "date-time", "description": "创建时间", "example": "2025-01-01T00:00:00" },
+          "updated_at": { "type": "string", "format": "date-time", "description": "更新时间", "example": "2025-01-01T00:00:00" }
+        }
+      },
+      "TokenInfo": {
+        "type": "object",
+        "description": "Token 信息",
+        "properties": {
+          "id": { "type": "integer", "format": "int64", "description": "ID" },
+          "token": { "type": "string", "description": "Token 值", "example": "8080_a1b2c3d4e5f6e7f8g9h0i1j2k3l4m5n6" },
+          "label": { "type": "string", "description": "Token 标签", "example": "我的应用" },
+          "balance": { "type": "string", "description": "当前余额（积分）", "example": "5000" },
+          "created_at": { "type": "string", "format": "date-time", "description": "创建时间" },
+          "max_concurrent": { "type": "integer", "description": "最大并发数", "example": 5 }
+        }
+      },
+      "TokenGenerated": {
+        "type": "object",
+        "description": "Token 生成响应",
+        "properties": {
+          "token": { "type": "string", "description": "新生成的 Token 值", "example": "8080_a1b2c3d4e5f6e7f8g9h0i1j2k3l4m5n6" },
+          "label": { "type": "string", "description": "Token 标签", "example": "我的应用" },
+          "balance": { "type": "string", "description": "初始余额", "example": "0" }
+        }
+      },
+      "BalanceInfo": {
+        "type": "object",
+        "description": "余额信息",
+        "properties": {
+          "token": { "type": "string", "description": "Token 值" },
+          "label": { "type": "string", "description": "Token 标签" },
+          "balance": { "type": "string", "description": "当前余额", "example": "5000" },
+          "max_concurrent": { "type": "integer", "description": "最大并发数", "example": 5 }
+        }
+      },
+      "OperationResult": {
+        "type": "object",
+        "description": "操作结果",
+        "properties": {
+          "success": { "type": "boolean", "example": true },
+          "message": { "type": "string", "description": "操作结果描述", "example": "充值成功" }
+        }
+      },
+      "TransactionInfo": {
+        "type": "object",
+        "description": "流水记录（非管理员，基本字段）",
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "token": { "type": "string", "description": "Token 值" },
+          "token_prefix": { "type": "string", "description": "Token 前缀" },
+          "label": { "type": "string", "description": "Token 标签" },
+          "change_type": { "type": "string", "description": "变动类型（recharge/deduct/ask）", "example": "recharge" },
+          "amount": { "type": "string", "description": "变动金额", "example": "+1000" },
+          "balance_after": { "type": "string", "description": "变动后余额" },
+          "channel_name": { "type": "string", "description": "渠道名" },
+          "request_id": { "type": "string", "description": "请求 ID" },
+          "operator": { "type": "string", "description": "操作者" },
+          "metadata": { "type": "string", "description": "元数据" },
+          "remark": { "type": "string", "description": "备注" },
+          "created_at": { "type": "string", "format": "date-time", "description": "创建时间" }
+        }
+      },
+      "AdminTransactionInfo": {
+        "type": "object",
+        "description": "流水记录（管理员，含计费详情）",
+        "properties": {
+          "id": { "type": "integer", "format": "int64" },
+          "token": { "type": "string" },
+          "token_prefix": { "type": "string" },
+          "label": { "type": "string" },
+          "change_type": { "type": "string" },
+          "amount": { "type": "string" },
+          "balance_after": { "type": "string" },
+          "channel_name": { "type": "string" },
+          "request_id": { "type": "string" },
+          "operator": { "type": "string" },
+          "metadata": { "type": "string" },
+          "remark": { "type": "string", "description": "备注" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "input_tokens": { "type": "integer", "format": "int64", "description": "输入 Token 数" },
+          "input_price": { "type": "string", "description": "输入单价" },
+          "cached_tokens": { "type": "integer", "format": "int64", "description": "缓存 Token 数" },
+          "cached_price": { "type": "string", "description": "缓存单价" },
+          "output_tokens": { "type": "integer", "format": "int64", "description": "输出 Token 数" },
+          "output_price": { "type": "string", "description": "输出单价" },
+          "multiplier": { "type": "string", "description": "使用的倍率", "example": "1.0" }
+        }
+      },
+      "TransactionPage": {
+        "type": "object",
+        "description": "分页流水（非管理员）",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TransactionInfo" }
+          },
+          "total": { "type": "integer", "description": "总记录数" },
+          "page": { "type": "integer", "description": "当前页码" },
+          "page_size": { "type": "integer", "description": "每页条数" }
+        }
+      },
+      "AdminTransactionPage": {
+        "type": "object",
+        "description": "分页流水（管理员）",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/AdminTransactionInfo" }
+          },
+          "total": { "type": "integer", "description": "总记录数" },
+          "page": { "type": "integer", "description": "当前页码" },
+          "page_size": { "type": "integer", "description": "每页条数" }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "description": "错误响应",
+        "properties": {
+          "success": { "type": "boolean", "example": false },
+          "data": { "type": "null" },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "integer", "example": 401 },
+              "message": { "type": "string", "example": "鉴权失败" }
+            }
+          },
+          "message": { "type": "string", "example": "鉴权失败" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "鉴权失败 — Token 无效或未提供",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "请求参数错误",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "资源不存在",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      }
+    }
+  }
+}

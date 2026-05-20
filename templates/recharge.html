@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+    <h2>充值 / 扣减</h2>
+    <form id="opForm" onsubmit="submitOp(event)">
+        <div class="form-row">
+            <div class="form-group"><label>Token *</label><input name="token" required placeholder="粘贴 Token" style="font-family:monospace"></div>
+            <div class="form-group"><label>操作类型</label><select name="op"><option value="recharge">充值</option><option value="deduct">扣减</option></select></div>
+            <div class="form-group"><label>金额（积分）*</label><input name="amount" required placeholder="支持小数，精确到4位" step="0.0001"></div>
+        </div>
+        <div class="form-group"><label>备注</label><input name="remark" id="remark" value="管理员操作" placeholder="管理员操作"></div>
+        <button type="submit" class="btn btn-primary">确认操作</button>
+        <span id="result" style="margin-left:16px;font-size:13px"></span>
+    </form>
+</div>
+
+<div class="card">
+    <h2>余额查询</h2>
+    <form id="balForm" onsubmit="queryBalance(event)">
+        <div class="form-row">
+            <div class="form-group"><label>按 Token 查询</label><input name="token" placeholder="粘贴 Token" style="font-family:monospace"></div>
+            <div class="form-group"><label>或按标签查询</label><input name="label" placeholder="输入标签"></div>
+        </div>
+        <button type="submit" class="btn btn-primary">查询余额</button>
+    </form>
+    <div id="balanceResult" style="margin-top:16px"></div>
+</div>
+
+<script>
+async function submitOp(e){
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const op=fd.get('op');
+    const data={token:fd.get('token'),amount:fd.get('amount'),remark:fd.get('remark')};
+    const url=op==='recharge'?'/yy_easy_aiapi/api/token/recharge':'/yy_easy_aiapi/api/token/deduct';
+    const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    const j=await res.json();
+    const el=document.getElementById('result');
+    if(res.ok){el.innerHTML='<span style="color:green">'+j.data.message+'</span>'}
+    else{console.error('[充值/扣减]',j.error?.message,j);el.innerHTML='<span style="color:red">'+j.error?.message+'</span>'}
+}
+async function queryBalance(e){
+    e.preventDefault();
+    const fd=new FormData(e.target);
+    const params=new URLSearchParams();
+    if(fd.get('token'))params.set('token',fd.get('token'));
+    if(fd.get('label'))params.set('label',fd.get('label'));
+    const res=await fetch('/yy_easy_aiapi/api/token/balance?'+params.toString());
+    const j=await res.json();
+    const el=document.getElementById('balanceResult');
+    if(res.ok&&j.data){
+        el.innerHTML='<table><thead><tr><th>Token</th><th>标签</th><th>余额</th><th>最大并发</th></tr></thead><tbody>'
+            +j.data.map(b=>'<tr><td style="font-family:monospace;font-size:12px">'+b.token+'</td><td>'+b.label+'</td><td><strong>'+b.balance+'</strong></td><td>'+b.max_concurrent+'</td></tr>').join('')
+            +'</tbody></table>';
+    }else{console.error('[余额查询]',j.error?.message,j);el.innerHTML='<div class="alert alert-error">'+j.error?.message+'</div>'}
+}
+</script>
+{% endblock %}
