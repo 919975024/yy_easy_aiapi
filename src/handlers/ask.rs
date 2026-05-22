@@ -213,7 +213,7 @@ async fn parse_and_bill(
     // 单次调用：SQL 内完成 UPDATE balance + INSERT 全部流水字段
     let new_balance_str = match state.token_service.recharge(
         token_str, &cost_detail.total_cost,
-        "consume", "api", "",
+        "consume", "api", "业务触发",
         &channel.name, &request_id,
         input_tokens, &cost_detail.input_price_final.to_string(),
         cached_tokens, &cost_detail.cached_price_final.to_string(),

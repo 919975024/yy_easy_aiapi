@@ -83,8 +83,8 @@ fn create_channels_table(db: &Database) -> Result<(), stoolap::Error> {
             price_reference_url TEXT    NOT NULL DEFAULT '',
             model               TEXT    NOT NULL DEFAULT '',
             balance_url         TEXT    NOT NULL DEFAULT '',
-            created_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
-            updated_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            created_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', '+8 hours')),
+            updated_at          TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', '+8 hours'))
         )",
         (),
     )?;
@@ -102,7 +102,7 @@ fn create_tokens_table(db: &Database) -> Result<(), stoolap::Error> {
             token      TEXT    NOT NULL,
             label      TEXT    NOT NULL DEFAULT '',
             balance    REAL    NOT NULL DEFAULT 0,
-            created_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
+            created_at TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', '+8 hours'))
         )",
         (),
     )?;
@@ -128,7 +128,7 @@ fn create_transactions_table(db: &Database) -> Result<(), stoolap::Error> {
             operator      TEXT    NOT NULL DEFAULT 'api',
             metadata      TEXT    NOT NULL DEFAULT '{}',
             remark        TEXT    NOT NULL DEFAULT '',
-            created_at    TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+            created_at    TIMESTAMP NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', '+8 hours')),
             input_tokens  INTEGER NOT NULL DEFAULT 0,
             input_price   REAL    NOT NULL DEFAULT 0,
             cached_tokens INTEGER NOT NULL DEFAULT 0,

@@ -30,6 +30,7 @@ use axum::{
     routing::{delete, get, post, put},
     Router,
 };
+use chrono::TimeZone;
 use tracing::info;
 use tracing_subscriber::prelude::*;
 
@@ -158,4 +159,12 @@ pub fn build_app_state(config: AppConfig) -> AppState {
     );
 
     AppState::new(db, config)
+}
+
+/// 北京时间 (UTC+8) 的 ISO 格式: "2025-01-15T14:30:00"
+pub fn now_iso() -> String {
+    let beijing = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
+    beijing.from_utc_datetime(&chrono::Utc::now().naive_utc())
+        .format("%Y-%m-%dT%H:%M:%S")
+        .to_string()
 }

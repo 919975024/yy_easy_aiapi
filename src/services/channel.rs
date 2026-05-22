@@ -8,11 +8,6 @@ use crate::error::AppError;
 use crate::models::response::ChannelInfo;
 use crate::snowflake::IdGenerator;
 
-/// ISO 8601 时间戳（不带时区）
-fn now_iso() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
-}
-
 #[derive(Clone)]
 pub struct ChannelService {
     db: Arc<Database>,
@@ -72,7 +67,7 @@ impl ChannelService {
         balance_url: &str,
     ) -> Result<ChannelInfo, AppError> {
         let new_id = self.id_gen.next_id();
-        let now = now_iso();
+        let now = crate::now_iso();
 
         // 第一步：插入核心字段 + 时间戳（共 12 个参数，达到 stoolap 上限）
         // 注意：created_at/updated_at 必须在 INSERT 中显式写入，
@@ -159,7 +154,7 @@ impl ChannelService {
                 new_url.to_string(),
                 new_key.to_string(),
                 new_ct.to_string(),
-                now_iso(),
+                crate::now_iso(),
                 existing.id,
             ),
         )?;

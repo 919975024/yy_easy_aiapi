@@ -12,10 +12,6 @@ use crate::db::models::Token;
 use crate::error::AppError;
 use crate::models::response::{BalanceInfo, TokenGenerated, TokenInfo, TokenPage};
 
-fn now_iso() -> String {
-    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
-}
-
 #[derive(Clone)]
 pub struct TokenService {
     db: Arc<Database>,
@@ -34,7 +30,7 @@ impl TokenService {
         let token_str = format!("{}_{}", self.port, uuid_str);
         let balance = 0f64;
 
-        let now = now_iso();
+        let now = crate::now_iso();
         self.db.execute(
             "INSERT INTO tokens (token, label, balance, created_at) VALUES ($1, $2, $3, $4)",
             (token_str.clone(), label.to_string(), balance, now),
@@ -157,7 +153,7 @@ impl TokenService {
 
         let f = |s: &str| s.parse::<f64>().unwrap_or(0.0);
         let prefix = token_str.split('_').next().unwrap_or("");
-        let now = chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string();
+        let now = crate::now_iso();
         let remark = if remark.is_empty() { "管理员操作" } else { remark }.to_string();
 
         // Step 0: 查询当前余额（持锁内，防并发）
