@@ -37,7 +37,7 @@ async function searchTx(e, overridePage){
     if(res.ok&&j.data){
         const d = j.data;
         el.innerHTML='<table><thead><tr><th>ID</th><th>Token</th><th>前缀</th><th>标签</th><th>类型</th><th>金额</th><th>变更后余额</th><th>备注</th><th>输入Token</th><th>输入单价</th><th>缓存Token</th><th>缓存单价</th><th>输出Token</th><th>输出单价</th><th>倍率</th><th>渠道</th><th>操作者</th><th>时间</th></tr></thead><tbody>'
-            +d.items.map(tx=>'<tr><td>'+tx.id+'</td><td style="font-family:monospace;font-size:11px;max-width:100px;overflow:hidden;text-overflow:ellipsis">'+tx.token+'</td><td>'+tx.token_prefix+'</td><td>'+tx.label+'</td><td>'+
+            +d.items.map(tx=>'<tr><td>'+tx.id+'</td><td style="font-family:monospace;font-size:11px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+tx.token.replace(/"/g,'&quot;')+'">'+tx.token+'</td><td>'+tx.token_prefix+'</td><td>'+tx.label+'</td><td>'+
                 (tx.change_type==='recharge'?'<span class="badge badge-green">充值</span>':
                  tx.change_type==='deduct'?'<span class="badge badge-red">扣减</span>':
                  tx.change_type==='consume'?'<span class="badge badge-gray">消费</span>':tx.change_type)
