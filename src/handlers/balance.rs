@@ -17,6 +17,21 @@ pub async fn recharge(
         AppError::business(axum::http::StatusCode::BAD_REQUEST, "金额格式错误")
     })?;
 
+    if amount < Decimal::ZERO {
+        let old_balance_f64 = state.token_service.get_balance_f64(&req.token)?;
+        let old_balance: Decimal = old_balance_f64
+            .to_string()
+            .parse()
+            .map_err(|_| AppError::business(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "余额解析失败"))?;
+
+        let abs_amount = -amount;
+        if abs_amount > old_balance {
+            return Err(AppError::insufficient_balance(format!(
+                "余额不足，当前余额 {}，扣减 {}", old_balance, abs_amount
+            )));
+        }
+    }
+
     let new_balance = state.token_service.recharge(
         &req.token, &amount,
         "recharge", "admin", &req.remark,
